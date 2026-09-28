@@ -29,6 +29,12 @@ def _float(value, default):
         return default
 
 
+def _bool_or(value, fallback):
+    if value is None:
+        return fallback
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class Settings:
     host: str
@@ -45,6 +51,8 @@ class Settings:
     shutter_pin: int
     shutter_enabled: bool
     shutter_bounce_s: float
+    led_ir_active_high: bool
+    led_white_active_high: bool
     white_flash_ms: int
     white_settle_ms: int
     ir_settle_ms: int
@@ -60,6 +68,7 @@ def load_settings():
     captures_dir = os.getenv("CAPTURES_DIR", "captures")
     if not os.path.isabs(captures_dir):
         captures_dir = os.path.join(base_dir, captures_dir)
+    default_active_high = _bool(os.getenv("LED_ACTIVE_HIGH"), True)
     return Settings(
         host=os.getenv("CAMERA_HOST", "0.0.0.0"),
         port=_int(os.getenv("CAMERA_PORT"), 8000),
@@ -75,6 +84,8 @@ def load_settings():
         shutter_pin=_int(os.getenv("SHUTTER_PIN"), 17),
         shutter_enabled=_bool(os.getenv("SHUTTER_ENABLED"), True),
         shutter_bounce_s=_float(os.getenv("SHUTTER_BOUNCE_S"), 0.03),
+        led_ir_active_high=_bool_or(os.getenv("LED_IR_ACTIVE_HIGH"), default_active_high),
+        led_white_active_high=_bool_or(os.getenv("LED_WHITE_ACTIVE_HIGH"), default_active_high),
         white_flash_ms=_int(os.getenv("WHITE_FLASH_MS"), 200),
         white_settle_ms=_int(os.getenv("WHITE_SETTLE_MS"), 100),
         ir_settle_ms=_int(os.getenv("IR_SETTLE_MS"), 50),

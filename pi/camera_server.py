@@ -21,7 +21,13 @@ started_at = time.time()
 last_error = {"message": None}
 
 camera = build_camera(settings)
-leds = LedController(settings.led_ir_pin, settings.led_white_pin, mock=settings.mock)
+leds = LedController(
+    settings.led_ir_pin,
+    settings.led_white_pin,
+    mock=settings.mock,
+    ir_active_high=settings.led_ir_active_high,
+    white_active_high=settings.led_white_active_high,
+)
 leds.set_mode(LedController.MODE_IR)
 
 
@@ -165,6 +171,9 @@ def captures(name):
 def led():
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
+        pulse = payload.get("pulse")
+        if pulse in ("ir", "white"):
+            return jsonify(leds.pulse(pulse, int(payload.get("ms", 400))))
         mode = payload.get("mode")
         if mode:
             leds.set_mode(mode)

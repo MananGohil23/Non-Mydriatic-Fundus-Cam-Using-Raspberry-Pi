@@ -14,17 +14,19 @@ class LedController:
     MODE_WHITE = "white"
     MODE_OFF = "off"
 
-    def __init__(self, ir_pin, white_pin, mock=False):
+    def __init__(self, ir_pin, white_pin, mock=False, ir_active_high=True, white_active_high=True):
         self.ir_pin = ir_pin
         self.white_pin = white_pin
+        self.ir_active_high = bool(ir_active_high)
+        self.white_active_high = bool(white_active_high)
         self.mock = bool(mock) or not GPIO_AVAILABLE
         self._lock = threading.RLock()
         self._mode = self.MODE_OFF
         self._ir = None
         self._white = None
         if not self.mock:
-            self._ir = LED(ir_pin)
-            self._white = LED(white_pin)
+            self._ir = LED(ir_pin, active_high=self.ir_active_high)
+            self._white = LED(white_pin, active_high=self.white_active_high)
         self._apply(self.MODE_OFF)
 
     def _apply(self, mode):
@@ -60,6 +62,17 @@ class LedController:
             self._apply(self.MODE_IR)
             self._mode = self.MODE_IR
 
+    def pulse(self, channel, duration_ms=400):
+        if channel not in (self.MODE_IR, self.MODE_WHITE):
+            raise ValueError("channel must be ir or white")
+        with self._lock:
+            previous = self._mode
+        target = self.MODE_WHITE if channel == self.MODE_WHITE else self.MODE_IR
+        self.set_mode(target)
+        time.sleep(max(0, duration_ms) / 1000.0)
+        self.set_mode(previous)
+        return self.status()
+
     def status(self):
         return {
             "mode": self.get_mode(),
@@ -67,6 +80,8 @@ class LedController:
             "gpio_available": GPIO_AVAILABLE,
             "ir_pin": self.ir_pin,
             "white_pin": self.white_pin,
+            "ir_active_high": self.ir_active_high,
+            "white_active_high": self.white_active_high,
         }
 
     def close(self):
