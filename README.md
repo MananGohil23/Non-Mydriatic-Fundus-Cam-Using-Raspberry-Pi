@@ -122,13 +122,28 @@ Find the Pi's address with `hostname -I` (or `ping raspberrypi.local`).
 
 ### 2.1 Raspberry Pi (camera server)
 
+Raspberry Pi OS is "externally managed" (PEP 668), so `pip install` against the system
+Python fails with `error: externally-managed-environment`. Use `apt` instead —
+`picamera2` must come from apt anyway and is tied to the system Python:
+
 ```bash
 sudo apt update
-sudo apt install -y python3-picamera2 python3-libcamera python3-kms++ python3-numpy
-sudo raspi-config            # Interface Options → enable the camera, then reboot
+sudo apt install -y python3-picamera2 python3-libcamera python3-kms++ \
+                    python3-numpy python3-opencv python3-gpiozero python3-flask
+sudo raspi-config            # Interface Options -> enable the camera, then reboot
 cd pi
-python3 -m pip install -r requirements.txt
 cp .env.example .env         # edit pins/resolution if needed
+python3 camera_server.py
+```
+
+No `pip` needed: `config.py` treats `python-dotenv` as optional, and `leds.py` falls
+back to a mock when `gpiozero` is missing. If you prefer a virtualenv, create it with
+system site-packages so it can still import the apt-installed `picamera2`:
+
+```bash
+python3 -m venv --system-site-packages ~/hth-venv
+source ~/hth-venv/bin/activate
+pip install flask gpiozero python-dotenv
 python3 camera_server.py
 ```
 
@@ -284,6 +299,7 @@ Grad-CAM hooks the last transformer block (`blocks[-1].norm1`).
 | Viewfinder shows "No camera signal" | Check Pi is running and `CAMERA_BASE_URL` is correct; open `http://<pi-ip>:8000/viewfinder` directly |
 | Backend `/health` says camera unreachable | Pi and laptop must be on the same network without client isolation; use a hotspot |
 | `picamera2` import error on the Pi | `sudo apt install -y python3-picamera2 python3-libcamera` (do not `pip install picamera2` on Bookworm) |
+| `externally-managed-environment` on the Pi | Use `apt` (see 2.1) or a venv created with `--system-site-packages`; don't pip into system Python |
 | `gpiozero`/GPIO error on Pi 5 | Pi 5 uses `lgpio`; `gpiozero>=2` handles it. Ensure the user is in the `gpio` group |
 | Stream works but capture fails | LED driver wiring / `WHITE_SETTLE_MS` too short; increase it |
 | Analysis always "Recapture Needed" | Frame failing the quality gate — improve focus/illumination or use `?force=true` |

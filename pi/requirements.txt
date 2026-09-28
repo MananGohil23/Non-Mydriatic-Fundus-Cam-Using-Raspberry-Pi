@@ -1,7 +1,20 @@
 # Raspberry Pi capture server (Pi OS Bookworm / Bullseye)
-# picamera2 + libcamera are normally preinstalled on Pi OS:
-#   sudo apt install -y python3-picamera2 python3-libcamera python3-kms++ python3-numpy
-# gpiozero ships with Pi OS; it works on Pi 3/4/5 (uses lgpio on Pi 5).
+#
+# Raspberry Pi OS is externally managed (PEP 668), so `pip install -r` against the
+# system Python FAILS with "externally-managed-environment". Install with apt instead:
+#
+#   sudo apt update
+#   sudo apt install -y python3-picamera2 python3-libcamera python3-kms++ \
+#                       python3-numpy python3-opencv python3-gpiozero python3-flask
+#
+# Then just run:  python3 camera_server.py
+#
+# (python-dotenv is optional - config.py works without it. If you want it, a venv is
+#  the clean way:)
+#   python3 -m venv --system-site-packages ~/hth-venv
+#   source ~/hth-venv/bin/activate
+#   pip install flask gpiozero python-dotenv
+#
 flask==3.0.3
 python-dotenv==1.0.1
 numpy>=1.24
