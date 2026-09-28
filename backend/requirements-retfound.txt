@@ -1,5 +1,8 @@
 # Optional: only needed when INFER_MODE=retfound (real model inference).
-# Install AFTER the base requirements.txt.
+# Install AFTER requirements.txt. Note: PyPI's Windows torch wheel is CPU-only, so
+# pull CUDA wheels from the PyTorch index instead of `pip install -r` directly:
+#   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
+#   pip install timm==0.9.16
 torch==2.5.1
 torchvision==0.20.1
 timm==0.9.16

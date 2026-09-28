@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import cv2
 import numpy as np
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -148,6 +149,10 @@ async def analyze(
     else:
         raise HTTPException(status_code=400, detail="provide a file upload or a capture_id")
 
+    return await run_in_threadpool(_analyze_capture, capture_id, image_bytes, force)
+
+
+def _analyze_capture(capture_id, image_bytes, force):
     decoded = _decode(image_bytes)
     if decoded is None:
         raise HTTPException(status_code=400, detail="could not decode image")

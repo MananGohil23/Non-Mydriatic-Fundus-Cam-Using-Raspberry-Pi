@@ -200,7 +200,7 @@ analyze any fundus photo without the Pi.
 | `CLASS_NAMES` | `normal,referable` | Comma-separated class order |
 | `INPUT_SIZE` | 224 | Model input size |
 | `QUALITY_ENABLED` | 1 | Run the quality gate before inference |
-| `BLUR_THRESHOLD` | 35 | Laplacian-variance blur floor |
+| `BLUR_THRESHOLD` | 12 | Laplacian variance at 384px shortest side (resolution-independent) |
 | `BRIGHTNESS_MIN/MAX` | 18 / 245 | Exposure bounds |
 | `CORS_ORIGINS` | `*` | Allowed dashboard origins |
 
@@ -251,7 +251,7 @@ checkpoint. To switch to the real model:
    ```
    INFER_MODE=retfound
    CHECKPOINT_PATH=C:\path\to\checkpoint-best.pth
-   MODEL_ARCH=vit_large_patch16
+   MODEL_ARCH=vit_large_patch16_224
    NUM_CLASSES=2
    CLASS_NAMES=normal,referable
    INPUT_SIZE=224

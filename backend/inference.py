@@ -25,6 +25,19 @@ def _softmax(values):
     return exp / exp.sum()
 
 
+def _align_cam(image_shape, cam, crop_box):
+    height, width = image_shape[:2]
+    full = np.zeros((height, width), dtype=np.float32)
+    x0, y0, crop_w, crop_h = crop_box
+    x0 = int(max(0, min(width - 1, round(x0))))
+    y0 = int(max(0, min(height - 1, round(y0))))
+    x1 = int(max(x0 + 1, min(width, round(x0 + crop_w))))
+    y1 = int(max(y0 + 1, min(height, round(y0 + crop_h))))
+    resized = cv2.resize(cam, (x1 - x0, y1 - y0), interpolation=cv2.INTER_CUBIC)
+    full[y0:y1, x0:x1] = resized
+    return full
+
+
 class StubInference:
     name = "stub"
     available = True
@@ -89,13 +102,28 @@ class RetfoundInference:
         self.num_classes = int(num_classes)
         self.input_size = int(input_size)
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-        self.model = timm.create_model(
-            model_arch,
-            pretrained=False,
-            num_classes=self.num_classes,
-            img_size=self.input_size,
-            global_pool="avg",
-        )
+        self.model = None
+        self.model_arch = model_arch
+        last_error = None
+        candidates = []
+        for candidate in (model_arch, "%s_%d" % (model_arch, self.input_size), "%s_224" % model_arch):
+            if candidate not in candidates:
+                candidates.append(candidate)
+        for candidate in candidates:
+            try:
+                self.model = timm.create_model(
+                    candidate,
+                    pretrained=False,
+                    num_classes=self.num_classes,
+                    img_size=self.input_size,
+                    global_pool="avg",
+                )
+                self.model_arch = candidate
+                break
+            except Exception as exc:
+                last_error = exc
+        if self.model is None:
+            raise RuntimeError("could not build timm backbone for %r: %s" % (model_arch, last_error))
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         state = checkpoint.get("model", checkpoint.get("state_dict", checkpoint))
         state = {key.replace("module.", ""): value for key, value in state.items()}
@@ -110,14 +138,15 @@ class RetfoundInference:
         resize_to = int(round(self.input_size * 256 / 224))
         scale = resize_to / min(height, width)
         new_size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
-        image = cv2.resize(image, new_size, interpolation=cv2.INTER_CUBIC)
-        top = max(0, (image.shape[0] - self.input_size) // 2)
-        left = max(0, (image.shape[1] - self.input_size) // 2)
-        image = image[top:top + self.input_size, left:left + self.input_size]
-        image = image.astype(np.float32) / 255.0
-        image = (image - IMAGENET_MEAN) / IMAGENET_STD
-        tensor = self.torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0).float()
-        return tensor.to(self.device)
+        resized = cv2.resize(image, new_size, interpolation=cv2.INTER_CUBIC)
+        top = max(0, (resized.shape[0] - self.input_size) // 2)
+        left = max(0, (resized.shape[1] - self.input_size) // 2)
+        crop = resized[top:top + self.input_size, left:left + self.input_size]
+        crop_box = (left / scale, top / scale, self.input_size / scale, self.input_size / scale)
+        crop = crop.astype(np.float32) / 255.0
+        crop = (crop - IMAGENET_MEAN) / IMAGENET_STD
+        tensor = self.torch.from_numpy(crop).permute(2, 0, 1).unsqueeze(0).float()
+        return tensor.to(self.device), crop_box
 
     def _gradcam(self, tensor, target_index):
         torch = self.torch
@@ -160,7 +189,7 @@ class RetfoundInference:
 
     def analyze(self, image_bgr, with_heatmap=True):
         torch = self.torch
-        tensor = self._preprocess(image_bgr)
+        tensor, crop_box = self._preprocess(image_bgr)
         with torch.no_grad():
             logits = self.model(tensor)[0].detach().cpu().numpy()
         probabilities = _softmax(logits)
@@ -170,6 +199,8 @@ class RetfoundInference:
         heatmap = None
         if with_heatmap:
             cam = self._gradcam(tensor, int(np.argmax(probabilities)))
+            if cam is not None:
+                cam = _align_cam(image_bgr.shape, cam, crop_box)
             heatmap = overlay_heatmap(image_bgr, cam)
         return {
             "label": label,
@@ -193,7 +224,7 @@ def build_engine(settings):
                 settings.num_classes,
                 settings.class_names,
                 settings.input_size,
-            )
+            ), None
         except Exception as exc:
             return StubInference(settings.class_names, settings.input_size), "retfound load failed: %s" % exc
     reason = "checkpoint not configured" if settings.infer_mode == "retfound" else None

@@ -45,11 +45,14 @@ training/**/data/
 training/**/output_dir/
 training/**/output_logs/
 training/aptos/
-training/*.log
 
 # Datasets / archives - never commit GBs of images
 datasets/
 *.zip
 **/train_images/
 **/test_images/
+
+# Logs
+*.log
+logs/
 

@@ -1,6 +1,20 @@
 import cv2
 import numpy as np
 
+REFERENCE_SHORT_SIDE = 384
+
+
+def _laplacian_variance(gray, reference=REFERENCE_SHORT_SIDE):
+    height, width = gray.shape[:2]
+    scale = reference / max(1, min(height, width))
+    if abs(scale - 1.0) > 0.01:
+        gray = cv2.resize(
+            gray,
+            (max(1, int(round(width * scale))), max(1, int(round(height * scale)))),
+            interpolation=cv2.INTER_AREA,
+        )
+    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
 
 def _score_blur(blur, threshold):
     if threshold <= 0:
@@ -16,7 +30,7 @@ def _score_brightness(brightness, low, high):
     return float(np.clip(100.0 * ((255.0 - brightness) / max(1.0, 255.0 - high)), 0.0, 100.0))
 
 
-def assess(image_bgr, blur_threshold=35.0, brightness_min=18.0, brightness_max=245.0):
+def assess(image_bgr, blur_threshold=12.0, brightness_min=18.0, brightness_max=245.0):
     if image_bgr is None or image_bgr.size == 0:
         return {
             "usable": False,
@@ -29,7 +43,7 @@ def assess(image_bgr, blur_threshold=35.0, brightness_min=18.0, brightness_max=2
         }
 
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-    blur = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    blur = _laplacian_variance(gray)
     brightness = float(gray.mean())
     contrast = float(gray.std())
 
