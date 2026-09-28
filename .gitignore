@@ -37,3 +37,19 @@ Thumbs.db
 *.pt
 *.ckpt
 *.safetensors
+
+# Training workspace (third-party repo, datasets, checkpoints, env)
+training/.venv/
+training/RETFound-main/
+training/**/data/
+training/**/output_dir/
+training/**/output_logs/
+training/aptos/
+training/*.log
+
+# Datasets / archives - never commit GBs of images
+datasets/
+*.zip
+**/train_images/
+**/test_images/
+

@@ -259,10 +259,21 @@ checkpoint. To switch to the real model:
 
 4. Restart uvicorn. `/health` will report `"engine": "retfound"`.
 
-`backend/inference.py` loads the timm ViT-Large backbone, applies ImageNet
-normalisation at `INPUT_SIZE`, runs a softmax head, and produces a Grad-CAM overlay from
-the last transformer block. **The resize/normalisation here must match training-time
-preprocessing exactly**, or accuracy collapses — keep them in sync.
+`backend/inference.py` builds the model with `timm.create_model(arch, num_classes=N,
+img_size=INPUT_SIZE, global_pool="avg")`, loads `checkpoint["model"]` (stripping a
+`module.` prefix), and applies the **same eval preprocessing as RETFound's
+`util/datasets.py`**: resize shortest side to `INPUT_SIZE*256/224` (bicubic), centre-crop
+to `INPUT_SIZE`, then ImageNet mean/std normalisation.
+
+Two things must match training exactly or accuracy collapses:
+
+- `global_pool="avg"` — RETFound's `models_vit.py` uses average pooling with `fc_norm`
+  (no cls-token `norm`). The default `global_pool="token"` would load the wrong head
+  features silently.
+- `INPUT_SIZE` must equal the fine-tuning `--input_size` (the saved `pos_embed` shape
+  depends on it), and `CLASS_NAMES` must be in ImageFolder alphabetical order.
+
+Grad-CAM hooks the last transformer block (`blocks[-1].norm1`).
 
 ---
 

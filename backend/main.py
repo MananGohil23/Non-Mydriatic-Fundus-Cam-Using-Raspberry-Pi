@@ -71,6 +71,7 @@ def health():
             "available": engine.available,
             "classes": list(settings.class_names),
             "note": state.get("engine_note"),
+            "load_report": getattr(engine, "load_report", None),
         },
         "quality_gate": settings.quality_enabled,
     }

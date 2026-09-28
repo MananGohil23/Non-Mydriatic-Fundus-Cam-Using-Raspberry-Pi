@@ -90,19 +90,30 @@ class RetfoundInference:
         self.input_size = int(input_size)
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.model = timm.create_model(
-            model_arch, pretrained=False, num_classes=self.num_classes, img_size=self.input_size
+            model_arch,
+            pretrained=False,
+            num_classes=self.num_classes,
+            img_size=self.input_size,
+            global_pool="avg",
         )
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         state = checkpoint.get("model", checkpoint.get("state_dict", checkpoint))
         state = {key.replace("module.", ""): value for key, value in state.items()}
         missing, unexpected = self.model.load_state_dict(state, strict=False)
-        self.load_report = {"missing": len(missing), "unexpected": len(unexpected)}
+        self.load_report = {"missing": list(missing), "unexpected": list(unexpected)}
         self.model.to(self.device)
         self.model.eval()
 
     def _preprocess(self, image_bgr):
         image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-        image = cv2.resize(image, (self.input_size, self.input_size), interpolation=cv2.INTER_LINEAR)
+        height, width = image.shape[:2]
+        resize_to = int(round(self.input_size * 256 / 224))
+        scale = resize_to / min(height, width)
+        new_size = (max(1, int(round(width * scale))), max(1, int(round(height * scale))))
+        image = cv2.resize(image, new_size, interpolation=cv2.INTER_CUBIC)
+        top = max(0, (image.shape[0] - self.input_size) // 2)
+        left = max(0, (image.shape[1] - self.input_size) // 2)
+        image = image[top:top + self.input_size, left:left + self.input_size]
         image = image.astype(np.float32) / 255.0
         image = (image - IMAGENET_MEAN) / IMAGENET_STD
         tensor = self.torch.from_numpy(image).permute(2, 0, 1).unsqueeze(0).float()
