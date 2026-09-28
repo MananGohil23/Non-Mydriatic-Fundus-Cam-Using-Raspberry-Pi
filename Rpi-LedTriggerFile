@@ -1,44 +1,100 @@
+import time
+import threading
 from gpiozero import LED, Button
-from time import sleep
-from signal import pause
+from picamera2 import Picamera2
+from flask import Flask, jsonify
 
-# Define GPIO Pins (Update these numbers to match your actual Pi wiring)
+app = Flask(__name__)
+
+# --- 1. HARDWARE SETUP ---
 IR_LED_PIN = 27
 WHITE_LED_PIN = 22
 TAP_SWITCH_PIN = 17
 
-# Initialize the components
-# bounce_time=0.03 exactly replicates your SWITCH_DEBOUNCE_MS of 30ms
-button = Button(TAP_SWITCH_PIN, bounce_time=0.03, pull_up=True) 
+button = Button(TAP_SWITCH_PIN, bounce_time=0.03, pull_up=True)
 ir_led = LED(IR_LED_PIN)
 white_led = LED(WHITE_LED_PIN)
 
-# Set the initial default state (IR_ACTIVE)
+# --- 2. CAMERA SETUP WITH LIVE FEED ---
+print("Initializing Camera...")
+picam2 = Picamera2()
+
+# Configure the camera to support both high-res still captures and a preview stream
+config = picam2.create_still_configuration()
+picam2.configure(config)
+picam2.start()
+
+# Launch the live preview window on the Raspberry Pi's connected monitor
+try:
+    print("Starting live preview on monitor...")
+    picam2.start_preview()
+except Exception as e:
+    print(f"Warning: Could not start preview window. Are you in a headless/SSH terminal without a desktop? Error: {e}")
+
+# Default LED State
 ir_led.on()
 white_led.off()
+is_capturing = False
 
-def run_led_sequence():
-    """This function runs exactly once per button press."""
+# --- 3. THE CAPTURE SEQUENCE ---
+def execute_flash_and_capture():
+    global is_capturing
+    if is_capturing:
+        return None
+    is_capturing = True
     
-    # Step 1: WAITING_FOR_WHITE (Turn IR off, wait 100ms)
+    # Step 1: Turn off IR
     ir_led.off()
-    white_led.off()  # Ensures it is off
-    sleep(0.1)       # 0.1 seconds = 100ms
+    time.sleep(0.1) # Wait 100ms (Dark interval)
     
-    # Step 2: WHITE_ACTIVE (Turn White on for 200ms)
+    # Step 2: Turn on White LED Flash
     white_led.on()
-    sleep(0.2)       # 0.2 seconds = 200ms
     
-    # Step 3: Return to IR_ACTIVE (Turn White off, IR back on)
+    # Wait a tiny fraction of a second to allow the camera's 
+    # Auto-Exposure (AE) to adjust to the sudden bright light
+    time.sleep(0.05) 
+    
+    # Step 3: Capture the Photo
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    filepath = f"/home/pi/Pictures/eye_capture_{timestamp}.jpg"
+    
+    try:
+        picam2.capture_file(filepath)
+        print(f"Photo successfully saved to: {filepath}")
+    except Exception as e:
+        print(f"Failed to capture photo: {e}")
+    
+    # Step 4: Turn White OFF, IR ON
     white_led.off()
     ir_led.on()
+    
+    is_capturing = False
+    return filepath
 
-# Attach the sequence to the button press event
-# This automatically handles your 'pressHandled' logic; it won't 
-# rapidly loop if you hold the button down.
-button.when_pressed = run_led_sequence
+# --- 4. HARDWARE BUTTON TRIGGER ---
+def on_physical_button_pressed():
+    # Run in a separate thread so it doesn't freeze the GPIO listener
+    print("Physical button pressed!")
+    threading.Thread(target=execute_flash_and_capture).start()
 
-print("System ready. IR is ON. Waiting for tap...")
+button.when_pressed = on_physical_button_pressed
 
-# Keep the script running indefinitely
-pause()
+# --- 5. DASHBOARD SOFTWARE TRIGGER (API) ---
+@app.route('/trigger_shutter', methods=['POST', 'GET'])
+def web_shutter():
+    """ The dashboard calls this URL to trigger the flash and capture """
+    if is_capturing:
+        return jsonify({"status": "error", "message": "Camera busy"}), 429
+        
+    filepath = execute_flash_and_capture()
+    if filepath:
+        return jsonify({"status": "success", "file": filepath}), 200
+    else:
+        return jsonify({"status": "error", "message": "Capture failed"}), 500
+
+if __name__ == '__main__':
+    print("System Ready. IR is ON.")
+    print("Live feed should be visible on the Pi's monitor.")
+    print("Listening for physical button press OR dashboard network requests...")
+    # Run the API server on port 5000
+    app.run(host='0.0.0.0', port=5000, threaded=True)
