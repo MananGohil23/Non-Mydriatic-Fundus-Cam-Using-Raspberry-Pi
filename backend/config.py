@@ -47,6 +47,8 @@ class Settings:
     brightness_max: float
     cors_origins: tuple
     camera_timeout: float
+    tap_poll_enabled: bool
+    tap_poll_ms: int
 
     @property
     def use_mock_camera(self):
@@ -80,6 +82,8 @@ def load_settings():
         brightness_max=_float(os.getenv("BRIGHTNESS_MAX"), 245.0),
         cors_origins=origins if origins else ("*",),
         camera_timeout=_float(os.getenv("CAMERA_TIMEOUT"), 20.0),
+        tap_poll_enabled=_bool(os.getenv("TAP_POLL_ENABLED"), True),
+        tap_poll_ms=_int(os.getenv("TAP_POLL_MS"), 1000),
     )
 
 

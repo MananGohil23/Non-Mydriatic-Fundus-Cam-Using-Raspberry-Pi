@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 
 from flask import Flask, Response, jsonify, request, send_from_directory
@@ -14,6 +15,8 @@ app = Flask(__name__)
 os.makedirs(settings.captures_dir, exist_ok=True)
 
 capture_lock = threading.Lock()
+captures_lock = threading.Lock()
+recent_captures = deque(maxlen=100)
 started_at = time.time()
 last_error = {"message": None}
 
@@ -41,38 +44,43 @@ def _start_camera():
         camera.start()
 
 
-def _perform_capture():
+def _perform_capture(source="api"):
     with capture_lock:
-        t0 = time.time()
-        leds.set_mode(LedController.MODE_WHITE)
+        leds.set_mode(LedController.MODE_OFF)
         time.sleep(settings.white_settle_ms / 1000.0)
+        leds.set_mode(LedController.MODE_WHITE)
+        time.sleep(settings.white_flash_ms / 1000.0)
         try:
             still = camera.capture_still_jpeg()
         finally:
-            on_time = settings.white_flash_ms / 1000.0
-            elapsed = time.time() - t0
-            if on_time > elapsed:
-                time.sleep(on_time - elapsed)
             leds.set_mode(LedController.MODE_IR)
         stamp = datetime.now(timezone.utc).astimezone()
         filename = "capture_%s.jpg" % stamp.strftime("%Y%m%d_%H%M%S_%f")[:-3]
         path = os.path.join(settings.captures_dir, filename)
         with open(path, "wb") as handle:
             handle.write(still)
-    return {
+
+    if settings.ir_settle_ms:
+        time.sleep(settings.ir_settle_ms / 1000.0)
+
+    meta = {
         "filename": filename,
         "url": "/captures/%s" % filename,
         "width": settings.still_width,
         "height": settings.still_height,
         "bytes": len(still),
         "captured_at": stamp.isoformat(),
-        "source": camera.name,
+        "source": source,
+        "camera": camera.name,
     }
+    with captures_lock:
+        recent_captures.appendleft(meta)
+    return meta
 
 
 def _on_shutter():
     try:
-        _perform_capture()
+        _perform_capture(source="button")
     except Exception as exc:
         last_error["message"] = "shutter capture failed: %s" % exc
 
@@ -80,7 +88,12 @@ def _on_shutter():
 shutter = None
 if settings.shutter_enabled:
     try:
-        shutter = ShutterButton(settings.shutter_pin, _on_shutter, mock=settings.mock)
+        shutter = ShutterButton(
+            settings.shutter_pin,
+            _on_shutter,
+            mock=settings.mock,
+            bounce_time=settings.shutter_bounce_s,
+        )
     except Exception as exc:
         last_error["message"] = "shutter init failed: %s" % exc
 
@@ -108,7 +121,7 @@ def index():
     return jsonify(
         {
             "service": "retina-camera",
-            "endpoints": ["/viewfinder", "/snapshot", "/capture", "/led", "/health", "/captures/<name>"],
+            "endpoints": ["/viewfinder", "/snapshot", "/capture", "/captures", "/led", "/health"],
         }
     )
 
@@ -129,10 +142,18 @@ def snapshot():
 @app.route("/capture", methods=["POST", "GET"])
 def capture():
     try:
-        return jsonify(_perform_capture())
+        return jsonify(_perform_capture(source="api"))
     except Exception as exc:
         last_error["message"] = str(exc)
         return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/captures")
+def captures_index():
+    limit = request.args.get("limit", 20, type=int)
+    with captures_lock:
+        items = list(recent_captures)[: max(1, limit)]
+    return jsonify({"captures": items, "count": len(items)})
 
 
 @app.route("/captures/<path:name>")
@@ -154,6 +175,8 @@ def led():
 
 @app.route("/health")
 def health():
+    with captures_lock:
+        last = recent_captures[0] if recent_captures else None
     return jsonify(
         {
             "ok": camera.latest_jpeg() is not None,
@@ -161,6 +184,7 @@ def health():
             "camera": camera.status(),
             "led": leds.status(),
             "shutter": shutter.status() if shutter else {"enabled": False, "pin": settings.shutter_pin},
+            "last_capture": last,
             "last_error": last_error["message"],
         }
     )

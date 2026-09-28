@@ -22,6 +22,13 @@ def _int(value, default):
         return default
 
 
+def _float(value, default):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 @dataclass(frozen=True)
 class Settings:
     host: str
@@ -37,9 +44,10 @@ class Settings:
     led_white_pin: int
     shutter_pin: int
     shutter_enabled: bool
+    shutter_bounce_s: float
     white_flash_ms: int
-    ir_settle_ms: int
     white_settle_ms: int
+    ir_settle_ms: int
     captures_dir: str
 
     @property
@@ -62,13 +70,14 @@ def load_settings():
         still_height=_int(os.getenv("STILL_HEIGHT"), 1944),
         stream_fps=_int(os.getenv("STREAM_FPS"), 15),
         jpeg_quality=_int(os.getenv("JPEG_QUALITY"), 80),
-        led_ir_pin=_int(os.getenv("LED_IR_PIN"), 17),
-        led_white_pin=_int(os.getenv("LED_WHITE_PIN"), 27),
-        shutter_pin=_int(os.getenv("SHUTTER_PIN"), 18),
+        led_ir_pin=_int(os.getenv("LED_IR_PIN"), 27),
+        led_white_pin=_int(os.getenv("LED_WHITE_PIN"), 22),
+        shutter_pin=_int(os.getenv("SHUTTER_PIN"), 17),
         shutter_enabled=_bool(os.getenv("SHUTTER_ENABLED"), True),
-        white_flash_ms=_int(os.getenv("WHITE_FLASH_MS"), 450),
-        ir_settle_ms=_int(os.getenv("IR_SETTLE_MS"), 120),
-        white_settle_ms=_int(os.getenv("WHITE_SETTLE_MS"), 150),
+        shutter_bounce_s=_float(os.getenv("SHUTTER_BOUNCE_S"), 0.03),
+        white_flash_ms=_int(os.getenv("WHITE_FLASH_MS"), 200),
+        white_settle_ms=_int(os.getenv("WHITE_SETTLE_MS"), 100),
+        ir_settle_ms=_int(os.getenv("IR_SETTLE_MS"), 50),
         captures_dir=captures_dir,
     )
 

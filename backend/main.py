@@ -1,3 +1,4 @@
+import asyncio
 import os
 import threading
 import time
@@ -21,6 +22,55 @@ from store import store
 state = {}
 
 
+def _prime_seen_captures():
+    try:
+        metas = state["camera"].list_captures(50)
+    except Exception:
+        return
+    with state["seen_lock"]:
+        for meta in metas:
+            filename = meta.get("filename")
+            if filename:
+                state["seen_captures"].add(filename)
+
+
+def _process_tap(meta):
+    path = meta.get("url")
+    if not path:
+        return
+    image = state["camera"].fetch(path)
+    if not image:
+        return
+    record = store.add(image, meta={"source": "button", "filename": meta.get("filename")})
+    payload = _analyze_capture(record["id"], image, False)
+    payload["source"] = "button"
+    payload["captured_at"] = meta.get("captured_at") or record["created_at"]
+    state["latest_tap"] = payload
+
+
+async def _poll_taps():
+    interval = max(0.3, settings.tap_poll_ms / 1000.0)
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            metas = await run_in_threadpool(state["camera"].list_captures, 20)
+        except Exception:
+            continue
+        new_metas = []
+        with state["seen_lock"]:
+            for meta in reversed(metas):
+                filename = meta.get("filename")
+                if not filename or filename in state["seen_captures"]:
+                    continue
+                state["seen_captures"].add(filename)
+                new_metas.append(meta)
+        for meta in new_metas:
+            try:
+                await run_in_threadpool(_process_tap, meta)
+            except Exception:
+                continue
+
+
 @asynccontextmanager
 async def lifespan(_app):
     engine, engine_note = build_engine(settings)
@@ -30,8 +80,25 @@ async def lifespan(_app):
     camera_client.start()
     state["camera"] = camera_client
     state["camera_mock"] = settings.use_mock_camera
-    yield
-    camera_client.stop()
+    state["seen_captures"] = set()
+    state["seen_lock"] = threading.Lock()
+    state["latest_tap"] = None
+    await run_in_threadpool(_prime_seen_captures)
+    tap_task = None
+    if settings.tap_poll_enabled and not settings.use_mock_camera:
+        tap_task = asyncio.create_task(_poll_taps())
+    try:
+        yield
+    finally:
+        if tap_task is not None:
+            tap_task.cancel()
+            try:
+                await tap_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+        camera_client.stop()
 
 
 app = FastAPI(title="RetinaScreen API", version="1.0.0", lifespan=lifespan)
@@ -112,6 +179,10 @@ def capture():
     image = result.pop("image", None)
     if not image:
         raise HTTPException(status_code=502, detail="camera returned no image data")
+    filename = result.get("filename")
+    if filename:
+        with state["seen_lock"]:
+            state["seen_captures"].add(filename)
     decoded = _decode(image)
     quality = (
         assess(decoded, settings.blur_threshold, settings.brightness_min, settings.brightness_max)
@@ -232,7 +303,13 @@ def api_config():
         "camera_mode": "mock" if settings.use_mock_camera else "remote",
         "camera_base_url": settings.camera_base_url,
         "quality_gate": settings.quality_enabled,
+        "tap_poll": settings.tap_poll_enabled and not settings.use_mock_camera,
     }
+
+
+@app.get("/latest_tap")
+def latest_tap():
+    return {"tap": state.get("latest_tap")}
 
 
 dist_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))

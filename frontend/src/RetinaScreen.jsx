@@ -22,11 +22,12 @@ import {
   analyzeCapture,
   analyzeFile,
   listCaptures,
+  getLatestTap,
   viewfinderUrl,
   heatmapUrl,
   imageUrl,
 } from "./api";
-import { HEALTH_POLL_MS, VIEWFINDER_RETRY_MS } from "./config";
+import { HEALTH_POLL_MS, VIEWFINDER_RETRY_MS, TAP_POLL_MS } from "./config";
 
 const BG_LIGHT = "#F8FAFC";
 const ACCENT_SUCCESS = "#10B981";
@@ -360,6 +361,9 @@ function CaptureScreen({ goHome, onResult }) {
             <div className="text-center space-y-1">
               <p className="text-lg font-medium text-slate-800">Center patient pupil in the frame</p>
               <p className="text-sm text-slate-500">IR viewfinder is active. White LED flashes only on capture.</p>
+              <p className="text-xs text-emerald-600 font-medium">
+                The physical tap button also captures and opens the result here.
+              </p>
             </div>
 
             <div
@@ -716,6 +720,7 @@ export default function RetinaScreen() {
   const [screen, setScreen] = useState("home");
   const [outcome, setOutcome] = useState(null);
   const [health, setHealth] = useState(null);
+  const lastShownRef = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -736,11 +741,29 @@ export default function RetinaScreen() {
     };
   }, []);
 
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const data = await getLatestTap();
+        const tap = data && data.tap;
+        if (!tap || !tap.capture_id || lastShownRef.current === tap.capture_id) return;
+        lastShownRef.current = tap.capture_id;
+        setOutcome(tap);
+        setScreen("result");
+      } catch {
+        /* backend not ready yet */
+      }
+    };
+    const timer = setInterval(poll, TAP_POLL_MS);
+    return () => clearInterval(timer);
+  }, []);
+
   const goHome = () => setScreen("home");
   const goCapture = () => setScreen("capture");
   const goResultsList = () => setScreen("resultsList");
 
   const handleResult = (payload) => {
+    lastShownRef.current = payload && payload.capture_id ? payload.capture_id : null;
     setOutcome(payload);
     setScreen("result");
   };

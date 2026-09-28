@@ -39,6 +39,10 @@ export function listCaptures(limit = 20) {
   return requestJson(`/api/captures?limit=${limit}`);
 }
 
+export function getLatestTap() {
+  return requestJson("/latest_tap");
+}
+
 export function viewfinderUrl() {
   return `${API_BASE}/viewfinder`;
 }

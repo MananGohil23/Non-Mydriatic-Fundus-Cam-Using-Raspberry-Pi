@@ -63,6 +63,16 @@ class RemoteCameraClient:
         except Exception as exc:
             return {"reachable": False, "base_url": self.base_url, "error": str(exc)}
 
+    def list_captures(self, limit=20):
+        response = self._client.get("%s/captures" % self.base_url, params={"limit": limit})
+        response.raise_for_status()
+        return response.json().get("captures", [])
+
+    def fetch(self, path):
+        response = self._client.get("%s%s" % (self.base_url, path))
+        response.raise_for_status()
+        return response.content
+
 
 class MockCameraClient:
     def __init__(self, preview_size=(1280, 720), still_size=(1920, 1080), fps=15, jpeg_quality=80):
@@ -103,6 +113,12 @@ class MockCameraClient:
         status["reachable"] = True
         status["base_url"] = "mock"
         return status
+
+    def list_captures(self, limit=20):
+        return []
+
+    def fetch(self, path):
+        return None
 
 
 def build_camera_client(settings):

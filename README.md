@@ -83,9 +83,9 @@ Two LEDs are driven from GPIO through NPN transistors (GPIO cannot source LED cu
 
 | Signal | Pi GPIO (BCM) | Physical pin | Goes to |
 |---|---|---|---|
-| IR LED enable | **BCM 17** | 11 | 1 kΩ → base of Q1 |
-| White LED enable | **BCM 27** | 13 | 1 kΩ → base of Q2 |
-| Shutter button | **BCM 18** | 12 | push-button → GND (internal pull-up) |
+| IR LED enable | **BCM 27** | 13 | 1 kΩ → base of Q1 |
+| White LED enable | **BCM 22** | 15 | 1 kΩ → base of Q2 |
+| Shutter button | **BCM 17** | 11 | push-button → GND (internal pull-up) |
 | Ground | — | 6 / 9 / 14 | common GND with LED supply |
 
 **Current-limit resistor:** `R = (V_supply - V_forward) / I_target`.
@@ -107,6 +107,21 @@ for the summed current. Never exceed the LED's rated forward current.
   `/capture`.
 - **No IR-cut filter** means colour response differs from clinical fundus cameras —
   this is part of the domain gap the model is adapted to.
+
+**Capture light sequence** (enforced on the Pi for both `/capture` and the physical
+button, matching the reference tap-switch sketch):
+
+```
+IR off -> wait WHITE_SETTLE_MS -> white on -> wait WHITE_FLASH_MS -> grab still -> IR on
+```
+
+**Physical tap button → dashboard.** `SHUTTER_PIN` (BCM 17) to GND, internal pull-up,
+debounced with `SHUTTER_BOUNCE_S`. A press runs the same capture sequence and saves a
+still on the Pi. A press is **not** a local-only action: the backend polls the Pi's
+`/captures` index (`TAP_POLL_ENABLED`, `TAP_POLL_MS`) and, when a new file appears,
+downloads it, runs the quality gate and the model, and exposes it at `GET /latest_tap`.
+The dashboard polls that endpoint and automatically opens the result screen — so a tap
+behaves like pressing the on-screen shutter.
 
 > Safety: do not look directly into the LEDs. Use current limiting. Keep a common ground.
 
@@ -198,11 +213,12 @@ analyze any fundus photo without the Pi.
 | `PREVIEW_WIDTH/HEIGHT` | 1280×720 | Viewfinder resolution |
 | `STREAM_FPS` | 15 | MJPEG frame rate |
 | `STILL_WIDTH/HEIGHT` | 2592×1944 | Full-res still |
-| `LED_IR_PIN` / `LED_WHITE_PIN` | 17 / 27 | LED driver GPIO (BCM) |
-| `SHUTTER_PIN` | 18 | Physical shutter button |
-| `WHITE_FLASH_MS` | 450 | White LED on-time for capture |
-| `WHITE_SETTLE_MS` | 150 | Delay after switching to white before capture |
-| `IR_SETTLE_MS` | 120 | Delay after switching back to IR |
+| `LED_IR_PIN` / `LED_WHITE_PIN` | 27 / 22 | LED driver GPIO (BCM) |
+| `SHUTTER_PIN` | 17 | Physical tap/shutter button (BCM) |
+| `SHUTTER_BOUNCE_S` | 0.03 | Button debounce (s) |
+| `WHITE_SETTLE_MS` | 100 | Dark settle time (all LEDs off) before the white flash |
+| `WHITE_FLASH_MS` | 200 | White LED on-time before the still is grabbed |
+| `IR_SETTLE_MS` | 50 | Pause after returning to IR |
 
 ### `backend/.env`
 

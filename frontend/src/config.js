@@ -4,3 +4,4 @@ export const API_BASE = rawBase.replace(/\/+$/, "");
 
 export const HEALTH_POLL_MS = 5000;
 export const VIEWFINDER_RETRY_MS = 4000;
+export const TAP_POLL_MS = 1500;

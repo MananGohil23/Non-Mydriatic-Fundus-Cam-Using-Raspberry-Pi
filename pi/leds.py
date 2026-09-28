@@ -81,13 +81,14 @@ class LedController:
 
 
 class ShutterButton:
-    def __init__(self, pin, callback, mock=False):
+    def __init__(self, pin, callback, mock=False, bounce_time=0.03):
         self.pin = pin
         self.callback = callback
+        self.bounce_time = float(bounce_time)
         self.mock = bool(mock) or not GPIO_AVAILABLE
         self._button = None
         if not self.mock:
-            self._button = Button(pin, pull_up=True, bounce_time=0.05)
+            self._button = Button(pin, pull_up=True, bounce_time=self.bounce_time)
             self._button.when_pressed = callback
 
     def status(self):
@@ -95,6 +96,7 @@ class ShutterButton:
             "enabled": not self.mock,
             "pin": self.pin,
             "mock": self.mock,
+            "bounce_time": self.bounce_time,
             "pressed": bool(self._button and self._button.is_pressed),
         }
 
