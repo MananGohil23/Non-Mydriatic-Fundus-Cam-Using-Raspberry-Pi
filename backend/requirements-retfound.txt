@@ -1,0 +1,5 @@
+# Optional: only needed when INFER_MODE=retfound (real model inference).
+# Install AFTER the base requirements.txt.
+torch==2.5.1
+torchvision==0.20.1
+timm==0.9.16

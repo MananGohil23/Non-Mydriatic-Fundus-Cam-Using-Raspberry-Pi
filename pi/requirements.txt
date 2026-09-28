@@ -1,0 +1,9 @@
+# Raspberry Pi capture server (Pi OS Bookworm / Bullseye)
+# picamera2 + libcamera are normally preinstalled on Pi OS:
+#   sudo apt install -y python3-picamera2 python3-libcamera python3-kms++ python3-numpy
+# gpiozero ships with Pi OS; it works on Pi 3/4/5 (uses lgpio on Pi 5).
+flask==3.0.3
+python-dotenv==1.0.1
+numpy>=1.24
+opencv-python-headless==4.10.0.84
+gpiozero>=2.0
