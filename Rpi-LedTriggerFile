@@ -1,0 +1,44 @@
+from gpiozero import LED, Button
+from time import sleep
+from signal import pause
+
+# Define GPIO Pins (Update these numbers to match your actual Pi wiring)
+IR_LED_PIN = 27
+WHITE_LED_PIN = 22
+TAP_SWITCH_PIN = 17
+
+# Initialize the components
+# bounce_time=0.03 exactly replicates your SWITCH_DEBOUNCE_MS of 30ms
+button = Button(TAP_SWITCH_PIN, bounce_time=0.03, pull_up=True) 
+ir_led = LED(IR_LED_PIN)
+white_led = LED(WHITE_LED_PIN)
+
+# Set the initial default state (IR_ACTIVE)
+ir_led.on()
+white_led.off()
+
+def run_led_sequence():
+    """This function runs exactly once per button press."""
+    
+    # Step 1: WAITING_FOR_WHITE (Turn IR off, wait 100ms)
+    ir_led.off()
+    white_led.off()  # Ensures it is off
+    sleep(0.1)       # 0.1 seconds = 100ms
+    
+    # Step 2: WHITE_ACTIVE (Turn White on for 200ms)
+    white_led.on()
+    sleep(0.2)       # 0.2 seconds = 200ms
+    
+    # Step 3: Return to IR_ACTIVE (Turn White off, IR back on)
+    white_led.off()
+    ir_led.on()
+
+# Attach the sequence to the button press event
+# This automatically handles your 'pressHandled' logic; it won't 
+# rapidly loop if you hold the button down.
+button.when_pressed = run_led_sequence
+
+print("System ready. IR is ON. Waiting for tap...")
+
+# Keep the script running indefinitely
+pause()
