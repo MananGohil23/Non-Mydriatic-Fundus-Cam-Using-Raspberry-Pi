@@ -63,7 +63,8 @@ async def _poll_taps():
                 if not filename or filename in state["seen_captures"]:
                     continue
                 state["seen_captures"].add(filename)
-                new_metas.append(meta)
+                if meta.get("source") == "button":
+                    new_metas.append(meta)
         for meta in new_metas:
             try:
                 await run_in_threadpool(_process_tap, meta)

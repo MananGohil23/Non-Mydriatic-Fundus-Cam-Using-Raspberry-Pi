@@ -93,7 +93,7 @@ function ScreenHeader({ title, onBack, step }) {
             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
               <Eye size={18} color="#fff" />
             </div>
-            <span className="text-xl font-semibold tracking-tight text-slate-800">RetinaScreen</span>
+            <span className="text-xl font-semibold tracking-tight text-slate-800">NMPF | Team FLUX</span>
           </div>
         )}
       </div>
@@ -721,6 +721,7 @@ export default function RetinaScreen() {
   const [outcome, setOutcome] = useState(null);
   const [health, setHealth] = useState(null);
   const lastShownRef = useRef(null);
+  const baselinedRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -746,8 +747,14 @@ export default function RetinaScreen() {
       try {
         const data = await getLatestTap();
         const tap = data && data.tap;
-        if (!tap || !tap.capture_id || lastShownRef.current === tap.capture_id) return;
-        lastShownRef.current = tap.capture_id;
+        const id = tap && tap.capture_id ? tap.capture_id : null;
+        if (!baselinedRef.current) {
+          baselinedRef.current = true;
+          if (id) lastShownRef.current = id;
+          return;
+        }
+        if (!id || lastShownRef.current === id) return;
+        lastShownRef.current = id;
         setOutcome(tap);
         setScreen("result");
       } catch {
